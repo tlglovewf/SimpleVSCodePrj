@@ -10,8 +10,8 @@ ENDIF()
 MESSAGE("Build  type: " ${CMAKE_BUILD_TYPE})
 
 #set debug compile setting
-set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS}  -Wall  -O0 -g  -march=native ")
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall  -O0 -g -march=native")
+#set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS}  -Wall  -O0 -g  -march=native ")
+#set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall  -O0 -g -march=native")
 
 #release compile setting
 #set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS}  -Wall  -O3  -march=native ")
@@ -46,7 +46,7 @@ if(NOT OpenCV_FOUND)
 endif()
 
 find_package(Eigen3 3.1.0 REQUIRED)
-find_package(Pangolin REQUIRED)
+#find_package(Pangolin REQUIRED)
 
 #set include file search path
 include_directories(
@@ -63,12 +63,12 @@ set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${PROJECT_SOURCE_DIR}/lib)
 
 set(MYLIB "mylibs")
 
-add_library(MYLIB SHARED
+add_library(${MYLIB} SHARED
 src/test.cpp
 )
 
 #link libs
-target_link_libraries(MYLIB
+target_link_libraries(${MYLIB}
 ${OpenCV_LIBS}
 ${EIGEN3_LIBS}
 #${Pangolin_LIBRARIES}
@@ -79,6 +79,6 @@ ${EIGEN3_LIBS}
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${PROJECT_SOURCE_DIR}/OutPut)
 
 #build exe 
-add_executable(test
+add_executable(te
 main.cpp)
-target_link_libraries(test MYLIB)
+target_link_libraries(te ${MYLIB})
