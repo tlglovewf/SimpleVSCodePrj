@@ -215,6 +215,7 @@ enum eFeatureMType
     FEATUREMATCHTYPE(Flann),
     FEATUREMATCHTYPE(Knn)
 };
+
 FEATUREMATCH(BF)
 {
     Ptr<DescriptorMatcher> matcher = DescriptorMatcher::create(DescriptorMatcher::BRUTEFORCE);  
@@ -258,7 +259,7 @@ FEATUREMATCH(Flann)
 
     for(int i =0;i<des1.rows;i++)
     {
-        if(matches[i].distance<0.5*maxDist)             ////调参褚   0.1越小 越精确  官方推荐0.5 如果确定点 可改变
+        if(matches[i].distance < 0.1*maxDist)             ////调参褚   0.1越小 越精确  官方推荐0.5 如果确定点 可改变
         {
             good_matches.push_back(matches[i]);
         }
@@ -268,11 +269,11 @@ FEATUREMATCH(Flann)
 FEATUREMATCH(Knn)
 {
     // cv::Ptr<cv::DescriptorMatcher> matcher = cv::DescriptorMatcher::create("FlannBased");
-    cv::Ptr<cv::DescriptorMatcher> matcher = cv::DescriptorMatcher::create(DescriptorMatcher::BRUTEFORCE_SL2);
+    cv::Ptr<cv::DescriptorMatcher> matcher = cv::DescriptorMatcher::create(DescriptorMatcher::BRUTEFORCE);
     vector< vector<DMatch> > knnMatches;
     matcher->knnMatch(des1,des2,knnMatches,2);
-    // matcher->radiusMatch()
-    const float minRatio = 0.4f;//0.4  0.5  0.6
+  
+    const float minRatio = 0.5f;//0.4  0.5  0.6
 
     for(int i = 0;i < knnMatches.size();++i)
     {
@@ -287,7 +288,6 @@ FEATUREMATCH(Knn)
     }
 }
 
-
 void featureMatch(eFeatureMType etype, const Mat &des1, const Mat &des2, vector<DMatch> &matches, vector<DMatch> &good_matches)
 {
     switch (etype)
@@ -297,6 +297,136 @@ void featureMatch(eFeatureMType etype, const Mat &des1, const Mat &des2, vector<
         FEATUREMATCHFUNC(Knn)   
     }
 }
+
+//动态物体
+class SemanticGraph
+{
+public:
+    typedef map<std::string, cv::Vec3b> Item;
+    typedef Item::const_iterator        ItemIter;
+
+    //设置语义路径
+    void setSemanticPath(const std::string &path)
+    {
+        mPath = path;
+    }
+
+    //单例
+    static SemanticGraph* Instance()
+    {
+        static SemanticGraph instance;
+        return &instance;
+    }
+    //加载
+    void loadObjInfos(const std::string &path)
+    {
+        if(path.empty())
+        {
+            cout << "error." << endl;
+        }
+        try
+        {
+            ifstream segfile;
+            segfile.open(path);
+
+            if(segfile.is_open())
+            {
+                cout << "load se files." << endl;
+                while(!segfile.eof())
+                {
+                    std::string str;
+                    getline(segfile,str);
+                    trimString(str);//去首尾空格
+                    if(str.empty() || str[0] == '#')
+                    {
+                        continue;
+                    }
+                    else
+                    {
+                        int s = str.find_first_of(":");
+                        int v = str.find_first_of("#");//剔除注释
+                        string name = str.substr(0,s);
+                        string result = str.substr(s+1,(v - s)-1);
+                        trimString(result);
+                        int r,g,b;
+                        sscanf( result.c_str(), "%d, %d, %d",&b,&g,&r);
+                        cv::Vec3b vv(r,g,b);
+                        mObjs.insert(std::make_pair(name,vv));
+                    }
+                }
+            }
+            segfile.close();
+        }
+        catch(const std::exception& e)
+        {
+            std::cerr << e.what() << '\n';
+        }
+    }
+
+    //是否为动态物体
+    bool isDynamicObj(const Point2f &pt, const std::string &name)
+    {
+        Mat img = imread(mPath + name);
+        isDynamicObj(pt, img);
+    }
+
+    //是否为动态物体
+    bool isDynamicObj(const Point2f &pt,const Mat &seimg)
+    {
+        if(seimg.empty())
+            return false;
+        
+       cv::Vec3b clr = seimg.at<Vec3b>(pt);
+
+       ItemIter it = mObjs.begin();
+       ItemIter ed = mObjs.end();
+
+       for(; it != ed ;++it)
+       {
+           if(it->second == clr)
+           {
+               return true;
+           }
+               
+       }
+       return false;
+    }
+
+    //[] 运算符
+    cv::Vec3b operator[](const std::string &name)const
+    {
+        ItemIter it = mObjs.find(name);
+        if(it != mObjs.end())
+        {
+            return it->second;
+        }
+        else
+        {
+            return cv::Vec3b();
+        }
+    }
+
+protected:
+    //剔除前后空格
+    void trimString(std::string & str )
+    {
+        if(str.empty())
+            return;
+        int s = str.find_first_not_of(" ");
+        int e = str.find_last_not_of(" ");
+
+        if( s == string::npos || 
+            e == string::npos)
+            return;
+
+        str = str.substr(s,e-s+1);
+    }
+    
+protected:
+    map<std::string, cv::Vec3b> mObjs;
+    std::string                 mPath;
+};
+
 
 
 
@@ -318,6 +448,8 @@ Mat drawFeatureMatch(const Mat &img1, const Mat &img2,
                         
                         Mat matchimg;
                         hconcat(keyimg1, keyimg2, matchimg);
+                        Mat imkeycombine;
+                        hconcat(keyimg1,keyimg2,imkeycombine);
                         int count = 0;
                         for(int i = 0;i < matches.size();++i)
                         {
@@ -340,13 +472,19 @@ Mat drawFeatureMatch(const Mat &img1, const Mat &img2,
                         }
                         putText(matchimg,"total match:" + std::to_string(matches.size()),cv::Point2f(textpos,textpos * 2),CV_FONT_HERSHEY_COMPLEX, 1, CV_RGB(255,0,0), 2, CV_AA);
                         putText(matchimg,"good  match:" + std::to_string(count) + " | " + std::to_string(100 * (count / (float)matches.size())) + "%",cv::Point2f(textpos,textpos * 3),CV_FONT_HERSHEY_COMPLEX, 1, CV_RGB(255,0,0), 2, CV_AA);
-                        return matchimg;
+
+                        Mat result;
+                        vconcat(imkeycombine,matchimg,result);
+                        return result;
                       }
 
 
 
 int main(void)
 {
+
+    SemanticGraph::Instance()->loadObjInfos("segraph.config");
+
     //camera paramters 
     cv::Mat camMatrix = (Mat_<double>(3,3) << 1201.093480021, 0, 732.166707527,
                                               0 ,1201.700469966, 561.641423523,
@@ -374,7 +512,7 @@ int main(void)
     //（3）constrastThreshold，对比度阈值用于过滤区域中的弱特征。阈值越大，检测器产生的特征越少。；
     //（4）edgeThreshold ，用于过滤掉类似边缘特征的阈值。 请注意，其含义与contrastThreshold不同，即edgeThreshold越大，滤出的特征越少；
     //（5）sigma，高斯输入层级， 如果图像分辨率较低，则可能需要减少数值。
-    Ptr<SIFT> featurer = SIFT::create(40,4,0.01,10,1.4);
+    Ptr<SIFT> featurer = SIFT::create(80,4,0.04,10,1.4);
 
     Mat img1;
     Mat img2;
@@ -384,15 +522,24 @@ int main(void)
     Mat des2;
     Time_Interval time;
     time.start();
-    detect(featurer,"/media/tlg/work/tlgfiles/HDData/0326-2/Image-0/0_13244.jpg",keypt1,img1);
+
+    const std::string imagepath = "/media/tlg/work/tlgfiles/HDData/0326-1/Image-0/";
+    const std::string seimgpath = "/media/tlg/work/tlgfiles/HDData/0326-1/Image-1/";
+
+
+    const std::string picname1 = "0_11038";//"0_11370.jpg";
+    const std::string picname2 = "0_11039";//"0_11371.jpg";
+
+    const std::string jpgsfx = ".jpg";
+    const std::string pngfx  = ".png";
+    detect(featurer,imagepath + picname1 + jpgsfx,keypt1,img1);
     time.prompt("feature detect:");
     
-    detect(featurer,"/media/tlg/work/tlgfiles/HDData/0326-2/Image-0/0_13245.jpg",keypt2,img2);
+    detect(featurer,imagepath + picname2 + jpgsfx,keypt2,img2);
+
+    Mat seimg1 = imread(seimgpath + picname1 + pngfx);
+    Mat seimg2 = imread(seimgpath + picname2 + pngfx);
     
-    Mat keypoint_img = drawKeys(img1,keypt1);
-    imwrite("/media/tlg/work/tlgfiles/HDData/result/sift_13244.jpg",keypoint_img);
-    keypoint_img = drawKeys(img2,keypt2);
-    imwrite("/media/tlg/work/tlgfiles/HDData/result/sift_13245.jpg",keypoint_img);
     time.start();
     featurer->compute(img1,keypt1,des1);
     time.prompt("calc descirpt ");
@@ -406,7 +553,26 @@ int main(void)
     // featureMatch(eBFType,des1,des2,matches,good_matches);
     // featureMatch(eFlannType,des1,des2,matches,good_matches);
     featureMatch(eKnnType,des1,des2,matches,good_matches);
-    time.prompt("feature matching cost ");
+    time.prompt("feature matching cost ",true);
+
+    vector<DMatch>::iterator it = good_matches.begin();
+    vector<DMatch>::iterator ed = good_matches.end();
+
+    matches.clear();
+    matches.reserve(good_matches.size());
+    for(; it != ed; ++it)
+    {
+        Point2f pt = keypt1[it->queryIdx].pt;
+
+        if(!SemanticGraph::Instance()->isDynamicObj(pt,seimg1))
+        {
+            matches.emplace_back(*it);
+        }
+    }
+    good_matches.swap(matches);
+
+    time.prompt("dynamic object filter ");
+
 
     vector<Point2f> pt1s;
     vector<Point2f> pt2s;
@@ -418,7 +584,7 @@ int main(void)
     }
 
     std::vector<char> stats;
-    Mat H = cv::findHomography(pt1s,pt2s,stats,FM_RANSAC,5.0);
+    Mat H = cv::findHomography(pt1s,pt2s,stats,FM_RANSAC,4.0);
     cout << "inliner size : " << std::count_if(stats.begin(), stats.end(),[](unsigned char n)->bool{
         return n > 0;
     }) << endl;
@@ -426,31 +592,44 @@ int main(void)
     pt2s.clear();
     for(int i = 0; i < good_matches.size(); ++i)
     {
+        const Point2f &prept =  keypt1[good_matches[i].queryIdx].pt;
         if(stats[i])
         {
-            pt1s.push_back( keypt1[good_matches[i].queryIdx].pt);
+            pt1s.push_back( prept );
             pt2s.push_back( keypt2[good_matches[i].trainIdx].pt);
         }
     }
 
-    Mat E = cv::findEssentialMat(pt1s,pt2s,camMatrix,FM_8POINT);
-
-    Mat R,t;
-    cv::recoverPose(E,pt1s,pt2s,camMatrix,R,t);
+    Mat E1 = cv::findEssentialMat(pt1s,pt2s,camMatrix);
+    Mat E2 = cv::findEssentialMat(pt1s,pt2s,camMatrix,FM_8POINT);
+    Mat R1,t1;
+    Mat R2,t2;
+    cv::recoverPose(E1,pt1s,pt2s,camMatrix,R1,t1);
+    cv::recoverPose(E2,pt1s,pt2s,camMatrix,R2,t2);
 
     Mat pose1 = Mat::eye(4,4,CV_64F);
     Mat pose2 = Mat::eye(4,4,CV_64F);
-    R.copyTo(pose2.rowRange(0,3).colRange(0,3));
-    t.copyTo(pose2.rowRange(0,3).col(3));
+    Mat pose3 = Mat::eye(4,4,CV_64F);
+
+    R1.copyTo(pose2.rowRange(0,3).colRange(0,3));
+    t1.copyTo(pose2.rowRange(0,3).col(3));
+
+    R2.copyTo(pose3.rowRange(0,3).colRange(0,3));
+    t2.copyTo(pose3.rowRange(0,3).col(3));
 
     PoseViewer::PoseNode node1;
     PoseViewer::PoseNode node2;
+    PoseViewer::PoseNode node3;
+
     node1._pose = pose1;
     node2._pose = pose2;
+    node3._pose = pose3;
+
     PoseViewer viewer;
     viewer.push_node(node1);
     viewer.push_node(node2);
-    // viewer.renderLoop();
+    viewer.push_node(node3);
+    viewer.renderLoop();
     //save images
     Mat img_match;
     Mat img_goodmatch;

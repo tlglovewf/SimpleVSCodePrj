@@ -206,3 +206,4 @@ void PoseViewer::drawMapPoints()
     }
     glEnd();
 }
+
