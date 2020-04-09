@@ -45,15 +45,21 @@ if(NOT OpenCV_FOUND)
    endif()
 endif()
 
-find_package(Eigen3 3.1.0 REQUIRED)
-#find_package(Pangolin REQUIRED)
+find_package(Eigen3 REQUIRED)
+find_package(Pangolin REQUIRED)
+
+if(NOT Pangolin_FOUND)
+   message(FATAL_ERROR "Pangolin not found.")
+else()
+   message("pangolin path : " ${Pangolin_INCLUDE_DIRS})
+endif()
 
 #set include file search path
 include_directories(
 ${PROJECT_SOURCE_DIR}
 ${PROJECT_SOURCE_DIR}/include
 ${EIGEN3_INCLUDE_DIR}
-#${Pangolin_INCLUDE_DIRS}
+${Pangolin_INCLUDE_DIRS}
 )
 
 #set lib link path 
@@ -71,7 +77,7 @@ src/test.cpp
 target_link_libraries(${MYLIB}
 ${OpenCV_LIBS}
 ${EIGEN3_LIBS}
-#${Pangolin_LIBRARIES}
+${Pangolin_LIBRARIES}
 #${PROJECT_SOURCE_DIR}/Thirdparty/g2o/lib/libg2o.so
 )
 

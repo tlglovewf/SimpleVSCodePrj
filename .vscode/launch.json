@@ -8,13 +8,13 @@
             "name": "CVTest",
             "type": "cppdbg",
             "request": "launch",
-            "program": "${workspaceFolder}/OutPut/test",
+            "program": "${workspaceFolder}/OutPut/te",
             "args": [],
             "stopAtEntry": false,
-            "cwd": "${workspaceFolder}",
+            "cwd": "${workspaceFolder}/OutPut/",
             "environment": [],
             "externalConsole": false,
-            "MIMode": "lldb"
+            "MIMode": "gdb"
         }
     ]
 }
