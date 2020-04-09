@@ -57,7 +57,7 @@ endif()
 #set include file search path
 include_directories(
 ${PROJECT_SOURCE_DIR}
-${PROJECT_SOURCE_DIR}/include
+${PROJECT_SOURCE_DIR}/inc
 ${EIGEN3_INCLUDE_DIR}
 ${Pangolin_INCLUDE_DIRS}
 )
@@ -70,7 +70,7 @@ set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${PROJECT_SOURCE_DIR}/lib)
 set(MYLIB "mylibs")
 
 add_library(${MYLIB} SHARED
-src/test.cpp
+src/PoseViewer.cpp
 )
 
 #link libs
